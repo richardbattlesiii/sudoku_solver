@@ -7,6 +7,7 @@ pub struct Cell {
 }
 
 impl Cell {
+    /// Creates a Cell that could be any digit.
     pub fn new() -> Self {
         Self {
             possibilities: [true; 9],
@@ -14,6 +15,7 @@ impl Cell {
         }
     }
 
+    /// Creates a solved Cell with the given digit.
     pub fn new_single_digit(input: usize) -> Self {
         let mut possibilities = [false; 9];
         possibilities[input] = true;
@@ -24,6 +26,7 @@ impl Cell {
         }
     }
 
+    /// Creates a solved Cell with the given char converted to a digit.
     pub fn new_single_char(input: char) -> Self {
         let mut possibilities = [false; 9];
         possibilities[input.to_digit(10).unwrap() as usize - 1] = true;
@@ -34,6 +37,7 @@ impl Cell {
         }
     }
 
+    /// Returns the only possible digit if it exists, or `None` if it doesn't.
     pub fn get_single_index(&self) -> Option<usize> {
         let mut output: Option<usize> = None;
         for i in 0..9 {
@@ -49,7 +53,7 @@ impl Cell {
         output
     }
 
-    /// Returns true if the digit wasn't solved but is now solved. Returns false otherwise.
+    /// Returns true iff the digit wasn't solved but is now solved.
     pub fn check_newly_solved(&mut self) -> bool {
         if self.solved {
             false
