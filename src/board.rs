@@ -1,9 +1,17 @@
 use std::fmt::Display;
 
-use crate::{boolean_operation::BooleanOperation, cell::Cell, digit_iterator::DigitIterator, digit_set::DigitSet, index_iterator::IndexIterator};
+use crate::{
+    boolean_operation::BooleanOperation,
+    cell::Cell,
+    digit_iterator::DigitIterator,
+    digit_set::DigitSet,
+    index_iterator::IndexIterator
+};
 
 const DEBUG: u8 = 1;
 
+/// Represents the state of a Sudoku board in the process of being solved,
+/// from the initial given state to a fully solved board.
 #[derive(Clone)]
 pub struct Board {
     pub tiles: Vec<Cell>,

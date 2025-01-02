@@ -1,11 +1,13 @@
 use crate::{board::Board, cell::Cell, digit_set::DigitSet, index_iterator::IndexIterator};
 
+/// Wrapper for an IndexIterator which returns references to `Cell`s instead of indices.
 pub struct DigitIterator<'a> {
     board: &'a Board,
     index_iterator: IndexIterator,
 }
 
 impl<'a> DigitIterator<'a> {
+    /// Creates a new DigitIterator containing a new IndexIterator over the specified board and set.
     pub fn new(board: &'a Board, set: DigitSet) -> Self {
         Self {
             board,

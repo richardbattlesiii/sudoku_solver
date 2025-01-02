@@ -1,6 +1,6 @@
 use crate::digit_set::DigitSet;
 
-/// An iterator over the indices (in format (row: usize, col: usize)) of the given set
+/// An iterator over the indices (in format (row: usize, col: usize)) of the given set.
 pub struct IndexIterator {
     set: DigitSet,
     current: usize,

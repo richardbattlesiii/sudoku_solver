@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+/// Represents a cell in the Sudoku, storing a list of the digits the cell could be.
 #[derive(PartialEq, Clone, Copy)]
 pub struct Cell {
     pub possibilities: [bool; 9],
