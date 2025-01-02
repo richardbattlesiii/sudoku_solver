@@ -2,10 +2,18 @@ use crate::digit_set::DigitSet;
 
 /// An iterator over the indices (in format (row: usize, col: usize)) of the given set
 pub struct IndexIterator {
-    pub set: DigitSet,
-    pub current: usize,
+    set: DigitSet,
+    current: usize,
 }
 
+impl IndexIterator {
+    pub fn new(set: DigitSet) -> Self {
+        Self {
+            set,
+            current: 0,
+        }
+    }
+}
 
 impl Iterator for IndexIterator {
     type Item = (usize, usize);

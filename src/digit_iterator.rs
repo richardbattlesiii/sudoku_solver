@@ -1,8 +1,17 @@
-use crate::{board::Board, cell::Cell, index_iterator::IndexIterator};
+use crate::{board::Board, cell::Cell, digit_set::DigitSet, index_iterator::IndexIterator};
 
 pub struct DigitIterator<'a> {
-    pub board: &'a Board,
-    pub index_iterator: IndexIterator,
+    board: &'a Board,
+    index_iterator: IndexIterator,
+}
+
+impl<'a> DigitIterator<'a> {
+    pub fn new(board: &'a Board, set: DigitSet) -> Self {
+        Self {
+            board,
+            index_iterator: IndexIterator::new(set),
+        }
+    }
 }
 
 impl<'a> Iterator for DigitIterator<'a> {

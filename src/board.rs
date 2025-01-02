@@ -296,21 +296,12 @@ impl Board {
 
     /// Returns a `DigitIterator` over the given set (which returns a type of `&Cell`).
     pub fn iter_digits(&self, set: DigitSet) -> DigitIterator {
-        DigitIterator {
-            board: self,
-            index_iterator: IndexIterator {
-                set,
-                current: 0
-            }
-        }
+        DigitIterator::new(self, set)
     }
 
     /// Returns an `IndexIterator` over the given set (which returns a type of `(usize, usize)`).
     pub fn iter_indices(&self, set: DigitSet) -> IndexIterator {
-        IndexIterator {
-            set,
-            current: 0
-        }
+        IndexIterator::new(set)
     }
 }
 
