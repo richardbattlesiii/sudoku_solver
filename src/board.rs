@@ -8,7 +8,7 @@ use crate::{
     index_iterator::IndexIterator
 };
 
-const DEBUG: u8 = 1;
+const DEBUG: u8 = 0;
 
 /// Represents the state of a Sudoku board in the process of being solved,
 /// from the initial given state to a fully solved board.
@@ -18,16 +18,15 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(input: &[[&str; 9]; 9]) -> Self {
+    pub fn new(input: &[[char; 9]; 9]) -> Self {
         let mut tiles: Vec<Cell> = Vec::new();
         for row in input.iter().take(9) {
             for &digit in row.iter().take(9) {
-                let current_char = digit.chars().next().unwrap();
-                if current_char == '.' {
+                if digit == '.' {
                     tiles.push(Cell::new());
                 }
                 else {
-                    tiles.push(Cell::new_single_char(current_char));
+                    tiles.push(Cell::new_single_char(digit));
                 }
             }
         }
