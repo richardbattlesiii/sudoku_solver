@@ -53,99 +53,99 @@ impl Board {
 
     /// Calls `reduce_possibilities` and `check_single_location`, then `solve_recursive` if those aren't enough
     pub fn solve(&mut self) {
-        self.for_sets(Board::reduce_possibilities, BooleanOperation::Or);
-        self.for_sets(Board::check_single_location, BooleanOperation::Or);
+        self.reduce_and_check_singles_loop();
 
-        if let Some(solved) = Self::solve_recursive(self.clone()) {
-            *self = solved;
-        }
-    
-        if !self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
-            panic!("Exited loop but unsolved.");
-        }
-    }
-
-    /// Uses `reduce_possibilities` and `check_single_location` until it stops making progress, then makes a guess and recurses
-    fn solve_recursive(mut board: Board) -> Option<Board> {
         if DEBUG > 0 {
-            println!("{board}");
-        }
-
-        //Loop until we stop making progress
-        let mut found_something = true;
-        while found_something {
-            found_something =
-                board.for_sets(Board::reduce_possibilities, BooleanOperation::Or) ||
-                board.for_sets(Board::check_single_location, BooleanOperation::Or);
-                if DEBUG > 0 {
-                    println!("{board}");
-                }
+            println!("{self}");
         }
 
         //Check if the board is solved
-        if board.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
+        if self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
             if DEBUG > 0 {
-                println!("{board}");
+                println!("{self}");
                 println!("Solved!");
             }
-            return Some(board);
+            return;
         }
 
-        //Board isn't solved
-        if DEBUG > 0 {
-            println!("Didn't find anything. Guessing.");
-        }
-        //Find the (unsolved) cell with the fewest possibilities
-        let mut min_possibilities = 10;
-        let mut guess_location = None;
-        for location in board.iter_indices(DigitSet::All) {
-            let digit = board.get(location);
-            let current_possibilities = digit.num_possibilities();
-            if !digit.solved && current_possibilities < min_possibilities {
-                min_possibilities = current_possibilities;
-                guess_location = Some(location);
-                //Can't do better than two possibilities, unless the digit is solved
-                if min_possibilities == 2 {
-                    break;
+        let mut solved = false;
+        let mut states_before_guesses: Vec<Board> = Vec::new();
+        while !solved {
+            let mut guess_location = None;
+            let mut guess_index = None;
+            //Keep backtracking until we find a valid guess
+            while guess_location.is_none() || guess_index.is_none() {
+                //Try to find the (unsolved) cell with the fewest possibilities
+                let mut min_possibilities = 10;
+                for location in self.iter_indices(DigitSet::All) {
+                    let cell = self.get(location);
+                    let current_possibilities = cell.num_possibilities();
+                    if !cell.solved && current_possibilities < min_possibilities {
+                        min_possibilities = current_possibilities;
+                        guess_location = Some(location);
+                        //Get the index of the first possible digit for the cell
+                        //For example, suppose the possibilities are 1, 3, and 7
+                        guess_index =
+                            cell
+                            .possibilities //e.g. [true, false, true, false, false false, true, false, false]
+                            .iter()
+                            .enumerate() //e.g. [(0, true), (1, false), (2, true) etc]
+                            .filter(|(_, &is_possible)| is_possible) //e.g. [(0, true), (2, true), (6, true)]
+                            .map(|(idx, _)| idx) //e.g. [0, 2, 6]
+                            .next(); //e.g. Some(0)
+
+                        //Can't do better than two possibilities
+                        //(unless the digit is solved, and we made sure it isn't)
+                        //If current_possibilities was 0 that means there's a contradiction
+                        if min_possibilities == 2 || min_possibilities == 0 {
+                            break;
+                        }
+                    }
+                }
+
+                //Check that we got a valid location and index
+                if let (Some(location), Some(index)) = (guess_location, guess_index) {
+                    //Found a valid guess, so make it.
+                    let cell = self.get_mut(location);
+
+                    //Remove the possibility of this guess for backtracking purposes
+                    cell.possibilities[index] = false;
+
+                    //Add a copy of the board in case we need to backtrack
+                    states_before_guesses.push(self.clone());
+
+                    //Make a solved version of the cell and put it into self
+                    let solved = Cell::new_single_digit(index);
+                    if DEBUG > 0 {
+                        println!("Guessing {solved} at {location:?}.");
+                        println!("{self}");
+                    }
+                    self.set(location, solved);
+                }
+                else {
+                    //Couldn't find a guess, need to backtrack
+                    if DEBUG > 0 {
+                        println!("Backtracking. Location: {guess_location:?}, Index: {guess_index:?}");
+                    }
+                    *self = states_before_guesses.pop().unwrap();
                 }
             }
-        }
 
-        //Check if there was a valid guess location
-        if let Some(location) = guess_location {
-            //Iterator over the indices of possible digits
-            //As an example, let's say location had the possibilites 1, 3, and 7
-            let iter = board
-                .get(location)
-                .possibilities //e.g. [true, false, true, false, false, false, true, false, false]
-                .iter() //e.g. iter over above
-                .enumerate() //e.g. [(0, true), (1, false), (2, true), etc]
-                .filter(|(_, &is_possible)| is_possible) //e.g. [(0, true), (2, true), (6, true)]
-                .map(|(idx, _)| idx); //e.g. [0, 2, 6]
-            //One of the possible guesses *must* be correct
-            //(if the board is solvable in its current state),
-            //so recurse on each one until solved
-            for possibility in iter {
-                let guess = Cell::new_single_digit(possibility);
+            //Reduce possibilities as much as possible
+            self.reduce_and_check_singles_loop();
+            if DEBUG > 0 {
+                println!("After reduction:\n{self}");
+            }
+
+            //And lastly, check if self is solved yet
+            if self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
+                solved = true;
                 if DEBUG > 0 {
-                    println!("Guessing {guess} at ({location:?})");
-                }
-                let mut new_board = board.clone();
-                new_board.set(location, guess);
-                if let Some(solved_board) = Self::solve_recursive(new_board) {
-                    return Some(solved_board);
+                    println!("{self}");
+                    println!("Solved!");
                 }
             }
         }
-
-        //Either we didn't find a valid guess location or we tried all guess possibilities,
-        //so board is unsolvable in its current state. Either the input was unsolvable or
-        //we made an invalid guess, so exit the recursion.
-        if DEBUG > 0 {
-            println!("Didn't find a guess / guesses didn't work. Exiting this recursion.");
-        }
-
-        None
     }
     
     /// Apply the given function to every row, col, and box. Returns the `BooleanOperation`'s 'combine' of each value.
@@ -179,6 +179,18 @@ impl Board {
 
         result
     }
+
+    pub fn reduce_and_check_singles_loop(&mut self) -> bool {
+        let mut found_something_ever = false;
+        let mut found_something_now = true;
+        while found_something_now {
+            found_something_now = 
+                self.for_sets(Board::reduce_possibilities, BooleanOperation::Or)
+                || self.for_sets(Board::check_single_location, BooleanOperation::Or);
+            found_something_ever |= found_something_now;
+        }
+        found_something_ever
+    }
     
     /// Remove possibilities from the set based on solved digits
     pub fn reduce_possibilities(&mut self, set: DigitSet) -> bool {
@@ -191,31 +203,31 @@ impl Board {
         let mut possible = [true; 9];
 
         //Loop over the set, removing each solved digit from possible
-        for digit in self.iter_digits(set) {
+        for cell in self.iter_digits(set) {
             //If the digit is solved,
-            if let Some(solved_digit) = digit.get_single_index() {
+            if let Some(solved_cell) = cell.get_single_index() {
                 //Set possbile to false for that digit
-                possible[solved_digit] = false;
+                possible[solved_cell] = false;
                 if DEBUG > 1 {
-                    println!("Can't use {}...", solved_digit + 1);
+                    println!("Can't use {}...", solved_cell + 1);
                 }
             }
         }
         
         //Loop over the set again, removing possibilities from each cell if it's not in 'possible'.
         for location in self.iter_indices(set) {
-            let digit = self.get_mut(location);
+            let cell = self.get_mut(location);
             //If the digit isn't already solved,
-            if !digit.solved {
+            if !cell.solved {
                 //Iterate through its possibilities and only keep the ones it already had and that are possible
-                digit.possibilities.iter_mut().enumerate().for_each(|(idx, value)| *value = *value && possible[idx]);
+                cell.possibilities.iter_mut().enumerate().for_each(|(idx, value)| *value = *value && possible[idx]);
             }
             //Check if the above process solved the digit
-            let newly_solved = digit.check_newly_solved();
+            let newly_solved = cell.check_newly_solved();
             //If so, found_something is true
             found_something |= newly_solved;
             if DEBUG > 1 && newly_solved {
-                println!("Newly solved: {digit} at ({location:?})!");
+                println!("Newly solved: {cell} at ({location:?})!");
             }
         }
 
@@ -237,12 +249,12 @@ impl Board {
             //Stores the *only* possible location for the needed_digit, if it exists.
             let mut possible_digit_location = None;
             //Loop through each position in the set and get a reference to each Cell
-            for ((row, col), digit) in self.iter_indices(set).zip(self.iter_digits(set)) {
+            for ((row, col), cell) in self.iter_indices(set).zip(self.iter_digits(set)) {
                 if DEBUG > 1 {
-                    println!("Checking the {digit} at ({row}, {col})");
+                    println!("Checking the {cell} at ({row}, {col})");
                 }
                 //If the digit can be needed_digit,
-                if digit.possibilities[needed_digit] {
+                if cell.possibilities[needed_digit] {
                     //and we haven't already found a possible location,
                     if possible_digit_location.is_none() {
                         //then update possible_digit_location.
@@ -284,9 +296,9 @@ impl Board {
         let mut used = [false; 9];
         let mut all_solved = true;
         for location in self.iter_indices(set) {
-            let digit = self.get_mut(location);
-            digit.check_newly_solved();
-            if let Some(solved) = digit.get_single_index() {
+            let cell = self.get_mut(location);
+            cell.check_newly_solved();
+            if let Some(solved) = cell.get_single_index() {
                 if used[solved] {
                     return false;
                 }

@@ -8,7 +8,7 @@ pub mod index_iterator;
 pub mod boolean_operation;
 
 fn main() {
-    let sudoku_to_solve = 5;
+    let sudoku_to_solve = 0;
     let initial = match sudoku_to_solve {
         //Very hard sudoku
         0 => {
@@ -44,9 +44,11 @@ fn main() {
         }
     };
 
+    let mut board = board::Board::new(&initial);
+    
     let start = Instant::now();
-    solve_sudoku(&initial);
-    println!("Took {}ms.", start.elapsed().as_millis());
+    board.solve();
+    println!("Took {} microseconds.", start.elapsed().as_micros());
 }
 
 pub fn solve_sudoku(input: &[[char; 9]; 9]) {
