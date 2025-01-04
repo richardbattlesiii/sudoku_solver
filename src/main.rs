@@ -50,10 +50,3 @@ fn main() {
     board.solve();
     println!("Took {} microseconds.", start.elapsed().as_micros());
 }
-
-pub fn solve_sudoku(input: &[[char; 9]; 9]) {
-    let mut board = board::Board::new(input);
-    //println!("{}", board);
-    board.solve();
-    //println!("{}", board);
-}
