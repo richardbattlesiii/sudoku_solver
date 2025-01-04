@@ -19,8 +19,7 @@ impl Iterator for IndexIterator {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if (self.current >= 9 && self.set != DigitSet::All) ||
-            (self.set == DigitSet::All && self.current >= 81) {
+        if self.current >= self.set.size() {
             None
         }
         else {

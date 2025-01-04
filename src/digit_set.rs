@@ -9,6 +9,15 @@ pub enum DigitSet {
     All,
 }
 
+impl DigitSet {
+    pub fn size(&self) -> usize {
+        match self {
+            Self::All => 81,
+            _ => 9,
+        }
+    }
+}
+
 impl Display for DigitSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
