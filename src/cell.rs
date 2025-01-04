@@ -30,7 +30,12 @@ impl Cell {
     /// Creates a solved Cell with the given char converted to a digit.
     pub fn new_single_char(input: char) -> Self {
         let mut possibilities = [false; 9];
-        possibilities[input.to_digit(10).unwrap() as usize - 1] = true;
+        if let Some(digit) = input.to_digit(10) {
+            possibilities[digit as usize - 1] = true;
+        }
+        else {
+            panic!("Invalid Cell input: {input}");
+        }
 
         Self {
             possibilities,

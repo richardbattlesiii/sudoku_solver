@@ -19,7 +19,7 @@ pub struct Board {
 
 impl Board {
     pub fn new(input: &[[char; 9]; 9]) -> Self {
-        let mut tiles: Vec<Cell> = Vec::new();
+        let mut tiles: Vec<Cell> = Vec::with_capacity(81);
         for row in input.iter().take(9) {
             for &digit in row.iter().take(9) {
                 if digit == '.' {
@@ -127,7 +127,14 @@ impl Board {
                     if DEBUG > 0 {
                         println!("Backtracking. Location: {guess_location:?}, Index: {guess_index:?}");
                     }
-                    *self = states_before_guesses.pop().unwrap();
+                    if let Some(previous_state) = states_before_guesses.pop() {
+                        *self = previous_state;
+                    }
+                    else {
+                        if DEBUG > 0 {
+                            println!("No more states to backtrack to. Puzzle is unsolvable.");
+                        }
+                    }
                 }
             }
 
