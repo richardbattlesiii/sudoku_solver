@@ -53,14 +53,20 @@ impl Board {
 
     /// Calls `reduce_possibilities` and `check_single_location`, then `solve_recursive` if those aren't enough
     pub fn solve(&mut self) {
-        self.reduce_and_check_singles_loop();
+        let unsolvable = self.reduce_and_check_singles_loop().is_none();
+        if unsolvable {
+            if DEBUG > 0 {
+                println!("Unsolvable puzzle.");
+            }
+            return;
+        }
 
         if DEBUG > 0 {
             println!("{self}");
         }
 
         //Check if the board is solved
-        if self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
+        if self.is_solved() {
             if DEBUG > 0 {
                 println!("{self}");
                 println!("Solved!");
@@ -108,6 +114,8 @@ impl Board {
                     //Found a valid guess, so make it.
                     let cell = self.get_mut(location);
 
+                    let num_possibilities = cell.num_possibilities();
+
                     //Remove the possibility of this guess for backtracking purposes
                     cell.possibilities[index] = false;
 
@@ -117,7 +125,7 @@ impl Board {
                     //Make a solved version of the cell and put it into self
                     let solved = Cell::new_single_digit(index);
                     if DEBUG > 0 {
-                        println!("Guessing {solved} at {location:?}.");
+                        println!("Guessing {solved} at {location:?} which had {num_possibilities} possibilities.");
                         println!("{self}");
                     }
                     self.set(location, solved);
@@ -127,6 +135,7 @@ impl Board {
                     if DEBUG > 0 {
                         println!("Backtracking. Location: {guess_location:?}, Index: {guess_index:?}");
                     }
+
                     if let Some(previous_state) = states_before_guesses.pop() {
                         *self = previous_state;
                     }
@@ -134,18 +143,23 @@ impl Board {
                         if DEBUG > 0 {
                             println!("No more states to backtrack to. Puzzle is unsolvable.");
                         }
+                        break;
                     }
                 }
             }
-
             //Reduce possibilities as much as possible
-            self.reduce_and_check_singles_loop();
+            let unsolvable = self.reduce_and_check_singles_loop().is_none();
             if DEBUG > 0 {
                 println!("After reduction:\n{self}");
             }
+            if unsolvable {
+                if DEBUG > 0 {
+                    println!("Unsolvable in its current state.");
+                }
+            }
 
             //And lastly, check if self is solved yet
-            if self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy) {
+            if self.is_solved() {
                 solved = true;
                 if DEBUG > 0 {
                     println!("{self}");
@@ -157,29 +171,35 @@ impl Board {
     
     /// Apply the given function to every row, col, and box. Returns the `BooleanOperation`'s 'combine' of each value.
     /// Iff `operation` is Lazy, the function might not be evaluated for every set.
-    pub fn for_sets<F>(&mut self, func: F, operation: BooleanOperation) -> bool
+    pub fn for_sets<F>(&mut self, func: F, operation: BooleanOperation) -> Option<bool>
     where
-        F: Fn(&mut Self, DigitSet) -> bool,
+        F: Fn(&mut Self, DigitSet) -> Option<bool>,
     {
-        let mut result = operation.initial();
+        let mut result = Some(operation.initial());
 
         for r in 0..9 {
-            result = operation.combine(result, func(self, DigitSet::Row(r)));
-            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != operation.initial() {
+            let current_value = func(self, DigitSet::Row(r));
+            let Some(value) = current_value else { return None };
+            result = Some(operation.combine(result.unwrap(), value));
+            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != Some(operation.initial()) {
                 return result;
             }
         }
 
         for c in 0..9 {
-            result = operation.combine(result, func(self, DigitSet::Col(c)));
-            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != operation.initial() {
+            let current_value = func(self, DigitSet::Col(c));
+            let Some(value) = current_value else { return None };
+            result = Some(operation.combine(result.unwrap(), value));
+            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != Some(operation.initial()) {
                 return result;
             }
         }
 
         for b in 0..9 {
-            result = operation.combine(result, func(self, DigitSet::Box(b)));
-            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != operation.initial() {
+            let current_value = func(self, DigitSet::Box(b));
+            let Some(value) = current_value else { return None };
+            result = Some(operation.combine(result.unwrap(), value));
+            if matches!(operation, BooleanOperation::OrLazy | BooleanOperation::AndLazy) && result != Some(operation.initial()) {
                 return result;
             }
         }
@@ -187,20 +207,30 @@ impl Board {
         result
     }
 
-    pub fn reduce_and_check_singles_loop(&mut self) -> bool {
+    pub fn reduce_and_check_singles_loop(&mut self) -> Option<bool> {
         let mut found_something_ever = false;
         let mut found_something_now = true;
         while found_something_now {
-            found_something_now = 
-                self.for_sets(Board::reduce_possibilities, BooleanOperation::Or)
-                || self.for_sets(Board::check_single_location, BooleanOperation::Or);
+            let found_by_reducing = self.for_sets(Board::reduce_possibilities, BooleanOperation::Or);
+            //Don't bother checking singles if the puzzle is definitely unsolvable.
+            if found_by_reducing.is_none() {
+                return None;
+            }
+            
+            let found_by_singles = self.for_sets(Board::check_single_location, BooleanOperation::Or);
+            if found_by_singles.is_none() {
+                return None;
+            }
+            
+            found_something_now = found_by_reducing.unwrap() || found_by_singles.unwrap();
             found_something_ever |= found_something_now;
         }
-        found_something_ever
+
+        Some(found_something_ever)
     }
     
     /// Remove possibilities from the set based on solved digits
-    pub fn reduce_possibilities(&mut self, set: DigitSet) -> bool {
+    pub fn reduce_possibilities(&mut self, set: DigitSet) -> Option<bool> {
         if DEBUG > 1 {
             println!("Reducing {set}...");
         }
@@ -228,23 +258,29 @@ impl Board {
             if !cell.solved {
                 //Iterate through its possibilities and only keep the ones it already had and that are possible
                 cell.possibilities.iter_mut().enumerate().for_each(|(idx, value)| *value = *value && possible[idx]);
-            }
-            //Check if the above process solved the digit
-            let newly_solved = cell.check_newly_solved();
-            //If so, found_something is true
-            found_something |= newly_solved;
-            if DEBUG > 1 && newly_solved {
-                println!("Newly solved: {cell} at ({location:?})!");
+                //Check if the cell is now impossible.
+                if cell.num_possibilities() == 0 {
+                    return None;
+                }
+                //Check if the above process solved the digit
+                let newly_solved = cell.check_newly_solved();
+                //If so, found_something is true
+                found_something |= newly_solved;
+                if DEBUG > 1 && newly_solved {
+                    println!("Newly solved: {cell} at ({location:?})!");
+                }
             }
         }
 
-        found_something
+        Some(found_something)
     }
 
     /// Check for single possible digit position in the given set.
     /// E.g. if there's only one position in row 6 that has 1 as a possibility,
     /// that cell must be 1.
-    pub fn check_single_location(&mut self, set: DigitSet) -> bool {
+    /// Returns true if if found something, false if it didn't, and `None` if the
+    /// puzzle is unsolvable in its current state.
+    pub fn check_single_location(&mut self, set: DigitSet) -> Option<bool> {
         if DEBUG > 1 {
             println!("Checking hidden singles in {set}...");
         }
@@ -254,7 +290,7 @@ impl Board {
                 println!("Checking for {needed_digit} singles...");
             }
             //Stores the *only* possible location for the needed_digit, if it exists.
-            let mut possible_digit_location = None;
+            let mut possible_digit_location = Some((10, 10));
             //Loop through each position in the set and get a reference to each Cell
             for ((row, col), cell) in self.iter_indices(set).zip(self.iter_digits(set)) {
                 if DEBUG > 1 {
@@ -276,30 +312,37 @@ impl Board {
                 }
             }
 
-            //If we found a single possible_digit_location.
+            //If we found a single possible_digit_location,
             if let Some(location) = possible_digit_location {
-                //update it if it isn't solved.
-                if !self.get(location).solved {
-                    let solved = Cell::new_single_digit(needed_digit);
-                    self.set(location, solved);
-                    if DEBUG > 1 {
-                        println!("Found single {solved} at ({location:?})!");
-                        println!("{self}");
-                        println!("Reducing after finding digit...");
+                //check if we never found a place to put the digit.
+                if location == (10, 10) {
+                    //If we didn't, then it's unsolvable.
+                    return None;
+                }
+                else {
+                    //Otherwise, update the cell (unless it's solved).
+                    if !self.get(location).solved {
+                        let solved = Cell::new_single_digit(needed_digit);
+                        self.set(location, solved);
+                        if DEBUG > 1 {
+                            println!("Found single {solved} at ({location:?})!");
+                            println!("{self}");
+                            println!("Reducing after finding digit...");
+                        }
+                        //Then reduce possibilities to make sure we don't place two of the same digit in sets that see each other.
+                        //e.g. if we placed a 1 in row 3 col 2 when checking row 3, then we can't place a 1 when checking col 2.
+                        self.for_sets(Board::reduce_possibilities, BooleanOperation::And);
+                        return Some(true);
                     }
-                    //Then reduce possibilities to make sure we don't place two of the same digit in sets that see each other.
-                    //e.g. if we placed a 1 in row 3 col 2 when checking row 3, then we can't place a 1 when checking col 2.
-                    self.for_sets(Board::reduce_possibilities, BooleanOperation::And);
-                    return true;
                 }
             }
         }
 
-        false
+        Some(false)
     }
 
     /// Checks if the given set has the digits 1 through 9 once each.
-    pub fn check_solved_set(&mut self, set: DigitSet) -> bool {
+    pub fn check_solved_set(&mut self, set: DigitSet) -> Option<bool> {
         let mut used = [false; 9];
         let mut all_solved = true;
         for location in self.iter_indices(set) {
@@ -307,7 +350,7 @@ impl Board {
             cell.check_newly_solved();
             if let Some(solved) = cell.get_single_index() {
                 if used[solved] {
-                    return false;
+                    return Some(false);
                 }
                 else {
                     used[solved] = true;
@@ -317,7 +360,11 @@ impl Board {
                 all_solved = false;
             }
         }
-        all_solved
+        Some(all_solved)
+    }
+
+    pub fn is_solved(&mut self) -> bool {
+        unsafe { self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy).unwrap_unchecked() }
     }
 
     /// Returns a `DigitIterator` over the given set (which returns a type of `&Cell`).
