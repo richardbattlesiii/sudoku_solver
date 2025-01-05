@@ -27,13 +27,9 @@ impl Iterator for IndexIterator {
                 DigitSet::Row(row) => Some((row, self.current)),
                 DigitSet::Col(col) => Some((self.current, col)),
                 DigitSet::Box(box_index) => {
-                    let start_row = 3 * (box_index / 3);
-                    let current_row = start_row + self.current / 3;
-
-                    let start_col = 3 * (box_index % 3);
-                    let current_col = start_col + self.current % 3;
-
-                    Some((current_row, current_col))
+                    let row = 3 * (box_index / 3) + self.current / 3;
+                    let col = 3 * (box_index % 3) + self.current % 3;
+                    Some((row, col))
                 },
                 DigitSet::All => Some((self.current / 9, self.current % 9)),
             };

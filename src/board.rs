@@ -9,6 +9,8 @@ use crate::{
 };
 
 const DEBUG: u8 = 0;
+pub const INVALID_LOCATION: (usize, usize) = (9, 9);
+pub const DUPLICATE_LOCATIONS: (usize, usize) = (10, 10);
 
 /// Represents the state of a Sudoku board in the process of being solved,
 /// from the initial given state to a fully solved board.
@@ -51,6 +53,288 @@ impl Board {
         self.tiles[r*9 + c] = input;
     }
 
+    /// Same logic as `solve()`, but combines loops to make it faster (though less readable)
+    pub fn fast_solve(&mut self) {
+        let mut states_before_guesses = Vec::new();
+        //While there's still progress to be made, keep looping.
+        loop {
+            //Find hidden and naked singles, and check if the puzzle is unsolvable.
+            let solvable = self.fast_reduction_loop().is_some();
+            if solvable && self.is_solved() {
+                return;
+            }
+            else if !solvable {
+                if self.backtrack(&mut states_before_guesses).is_none() {
+                    break;
+                }
+            }
+
+            self.guess_or_backtrack(&mut states_before_guesses);
+
+            if self.is_solved() {
+                break;
+            }
+        }
+
+        if DEBUG > 0 {
+            println!("{self}");
+        }
+    }
+
+    fn guess_or_backtrack(&mut self, states_before_guesses: &mut Vec<Board>) {
+        let mut guess_location = None;
+        let mut guess_index = None;
+        //Keep backtracking until we find a valid guess
+        while guess_location.is_none() || guess_index.is_none() {
+            //Try to find the (unsolved) cell with the fewest possibilities
+            let mut min_possibilities = 10;
+            for location in self.iter_indices(DigitSet::All) {
+                let cell = self.get(location);
+                let current_possibilities = cell.num_possibilities();
+                if !cell.solved && current_possibilities < min_possibilities {
+                    min_possibilities = current_possibilities;
+                    guess_location = Some(location);
+                    //Get the index of the first possible digit for the cell
+                    //For example, suppose the possibilities are 1, 3, and 7
+                    guess_index =
+                        cell
+                        .possibilities //e.g. [true, false, true, false, false false, true, false, false]
+                        .iter()
+                        .enumerate() //e.g. [(0, true), (1, false), (2, true) etc]
+                        .filter(|(_, &is_possible)| is_possible) //e.g. [(0, true), (2, true), (6, true)]
+                        .map(|(idx, _)| idx) //e.g. [0, 2, 6]
+                        .next(); //e.g. Some(0)
+
+                    //Can't do better than two possibilities
+                    //(unless the digit is solved, and we made sure it isn't)
+                    //If current_possibilities was 0 that means there's a contradiction
+                    if min_possibilities == 2 || min_possibilities == 0 {
+                        break;
+                    }
+                }
+            }
+
+            //Check that we got a valid location and index
+            if let (Some(location), Some(index)) = (guess_location, guess_index) {
+                //Found a valid guess, so make it.
+                self.make_guess(states_before_guesses, location, index);
+            }
+            else {
+                //Couldn't find a guess, need to backtrack
+                if self.backtrack(states_before_guesses).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+
+    fn make_guess(&mut self, states_before_guesses: &mut Vec<Board>, location: (usize, usize), index: usize) {
+        let cell = self.get_mut(location);
+
+        let num_possibilities = cell.num_possibilities();
+
+        //Remove the possibility of this guess for backtracking purposes
+        cell.possibilities[index] = false;
+
+        //Add a copy of the board in case we need to backtrack
+        states_before_guesses.push(self.clone());
+
+        //Make a solved version of the cell and put it into self
+        let solved = Cell::new_single_digit(index);
+        if DEBUG > 0 {
+            println!("Guessing {solved} at {location:?} which had {num_possibilities} possibilities.");
+            println!("{self}");
+        }
+        self.set(location, solved);
+    }
+
+    fn backtrack(&mut self, states_before_guesses: &mut Vec<Board>) -> Option<()> {
+        if let Some(previous_state) = states_before_guesses.pop() {
+            *self = previous_state;
+            Some(())
+        }
+        else {
+            if DEBUG > 0 {
+                println!("No more states to backtrack to. Puzzle is unsolvable.");
+            }
+            None
+        }
+    }
+
+    fn fast_reduction_loop(&mut self) -> Option<()> {
+        let mut found_something = Some(true);
+
+        while found_something.unwrap_or(false) {
+            if DEBUG > 0 {
+                println!("{self}");
+            }
+            found_something = Some(false);
+            //Keep track of which digits have been used, and where
+            let mut used_rows = [[false; 9]; 9];
+            let mut used_cols = [[false; 9]; 9];
+            let mut used_boxes = [[false; 9]; 9];
+
+            //Find the location of each solved digit.
+            for (row, col) in IndexIterator::new(DigitSet::All) {
+                let cell = self.get((row, col));
+                if cell.solved {
+                    let box_index = 3 * (row / 3) + (col / 3);
+                    let value = cell.get_single_index().unwrap();
+                    used_rows[row][value] = true;
+                    used_cols[col][value] = true;
+                    used_boxes[box_index][value] = true;
+                }
+            }
+
+            //Remove the possibilities of solved digits in each row, col, and box it's in.
+            for (row, col) in IndexIterator::new(DigitSet::All) {
+                let cell = self.get_mut((row, col));
+                if !cell.solved {
+                    let box_index = 3 * (row / 3) + (col / 3);
+                    for digit in 0..9 {
+                        if cell.possibilities[digit] && (used_rows[row][digit] || used_cols[col][digit] || used_boxes[box_index][digit]) {
+                            cell.possibilities[digit] = false;
+                            found_something = Some(true);
+                        }
+                    }
+
+                    if cell.check_newly_solved() {
+                        found_something = Some(true);
+
+                        let value = cell.get_single_index().unwrap();
+                        used_rows[row][value] = true;
+                        used_cols[col][value] = true;
+                        used_boxes[box_index][value] = true;
+                    }
+
+                    if !cell.solved && cell.num_possibilities() == 0 {
+                        found_something = None;
+                        if DEBUG > 0 {
+                            println!("Unsolvable.");
+                        }
+                        break;
+                    }
+                }
+            }
+
+            //Look for hidden singles for each digit
+            for needed_digit in 0..9 {
+                let mut found_digit = false;
+                for row in 0..9 {
+                    if !used_rows[row][needed_digit] {
+                        let mut location = INVALID_LOCATION;
+                        for col in 0..9 {
+                            let cell = self.get((row, col));
+                            if cell.possibilities[needed_digit] {
+                                if location == INVALID_LOCATION {
+                                    location = (row, col);
+                                }
+                                else {
+                                    location = DUPLICATE_LOCATIONS;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if location != INVALID_LOCATION && location != DUPLICATE_LOCATIONS {
+                            let solved_cell = Cell::new_single_digit(needed_digit);
+                            self.set(location, solved_cell);
+                            found_something = Some(true);
+                            found_digit = true;
+                            break;
+                        }
+                        else if location == INVALID_LOCATION {
+                            if DEBUG > 0 {
+                                println!("Unsolvable.");
+                            }
+                            found_something = None;
+                        }
+                    }
+                }
+                if found_digit {
+                    continue;
+                }
+
+                for col in 0..9 {
+                    if !used_cols[col][needed_digit] {
+                        let mut location = INVALID_LOCATION;
+                        for row in 0..9 {
+                            let cell = self.get((row, col));
+                            if cell.possibilities[needed_digit] {
+                                if location == INVALID_LOCATION {
+                                    location = (row, col);
+                                }
+                                else {
+                                    location = DUPLICATE_LOCATIONS;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if location != INVALID_LOCATION && location != DUPLICATE_LOCATIONS {
+                            let solved_cell = Cell::new_single_digit(needed_digit);
+                            self.set(location, solved_cell);
+                            found_something = Some(true);
+                            found_digit = true;
+                            break;
+                        }
+                        else if location == INVALID_LOCATION {
+                            if DEBUG > 0 {
+                                println!("Unsolvable.");
+                            }
+                            found_something = None;
+                        }
+                    }
+                }
+                if found_digit {
+                    continue;
+                }
+
+                for box_index in 0..9 {
+                    if !used_boxes[box_index][needed_digit] {
+                        let mut location = INVALID_LOCATION;
+                        for intra_box_index in 0..9 {
+                            let row = intra_box_index / 3 + 3 * (box_index / 3);
+                            let col = intra_box_index % 3 + 3 * (box_index % 3);
+                            let cell = self.get((row, col));
+                            if cell.possibilities[needed_digit] {
+                                if location == INVALID_LOCATION {
+                                    location = (row, col);
+                                }
+                                else {
+                                    location = DUPLICATE_LOCATIONS;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if location != INVALID_LOCATION && location != DUPLICATE_LOCATIONS {
+                            let solved_cell = Cell::new_single_digit(needed_digit);
+                            self.set(location, solved_cell);
+                            found_something = Some(true);
+                            break;
+                        }
+                        else if location == INVALID_LOCATION {
+                            if DEBUG > 0 {
+                                println!("Unsolvable.");
+                            }
+                            found_something = None;
+                        }
+                    }
+                }
+            }
+        }
+
+        if found_something.is_none() {
+            if DEBUG > 0 {
+                println!("Unsolvable puzzle.");
+            }
+            return None;
+        }
+
+        Some(())
+    }
+
     /// Calls `reduce_possibilities` and `check_single_location`, then `solve_recursive` if those aren't enough
     pub fn solve(&mut self) {
         let unsolvable = self.reduce_and_check_singles_loop().is_none();
@@ -74,79 +358,9 @@ impl Board {
             return;
         }
 
-        let mut solved = false;
         let mut states_before_guesses: Vec<Board> = Vec::new();
-        while !solved {
-            let mut guess_location = None;
-            let mut guess_index = None;
-            //Keep backtracking until we find a valid guess
-            while guess_location.is_none() || guess_index.is_none() {
-                //Try to find the (unsolved) cell with the fewest possibilities
-                let mut min_possibilities = 10;
-                for location in self.iter_indices(DigitSet::All) {
-                    let cell = self.get(location);
-                    let current_possibilities = cell.num_possibilities();
-                    if !cell.solved && current_possibilities < min_possibilities {
-                        min_possibilities = current_possibilities;
-                        guess_location = Some(location);
-                        //Get the index of the first possible digit for the cell
-                        //For example, suppose the possibilities are 1, 3, and 7
-                        guess_index =
-                            cell
-                            .possibilities //e.g. [true, false, true, false, false false, true, false, false]
-                            .iter()
-                            .enumerate() //e.g. [(0, true), (1, false), (2, true) etc]
-                            .filter(|(_, &is_possible)| is_possible) //e.g. [(0, true), (2, true), (6, true)]
-                            .map(|(idx, _)| idx) //e.g. [0, 2, 6]
-                            .next(); //e.g. Some(0)
-
-                        //Can't do better than two possibilities
-                        //(unless the digit is solved, and we made sure it isn't)
-                        //If current_possibilities was 0 that means there's a contradiction
-                        if min_possibilities == 2 || min_possibilities == 0 {
-                            break;
-                        }
-                    }
-                }
-
-                //Check that we got a valid location and index
-                if let (Some(location), Some(index)) = (guess_location, guess_index) {
-                    //Found a valid guess, so make it.
-                    let cell = self.get_mut(location);
-
-                    let num_possibilities = cell.num_possibilities();
-
-                    //Remove the possibility of this guess for backtracking purposes
-                    cell.possibilities[index] = false;
-
-                    //Add a copy of the board in case we need to backtrack
-                    states_before_guesses.push(self.clone());
-
-                    //Make a solved version of the cell and put it into self
-                    let solved = Cell::new_single_digit(index);
-                    if DEBUG > 0 {
-                        println!("Guessing {solved} at {location:?} which had {num_possibilities} possibilities.");
-                        println!("{self}");
-                    }
-                    self.set(location, solved);
-                }
-                else {
-                    //Couldn't find a guess, need to backtrack
-                    if DEBUG > 0 {
-                        println!("Backtracking. Location: {guess_location:?}, Index: {guess_index:?}");
-                    }
-
-                    if let Some(previous_state) = states_before_guesses.pop() {
-                        *self = previous_state;
-                    }
-                    else {
-                        if DEBUG > 0 {
-                            println!("No more states to backtrack to. Puzzle is unsolvable.");
-                        }
-                        break;
-                    }
-                }
-            }
+        loop {
+            self.guess_or_backtrack(&mut states_before_guesses);
             //Reduce possibilities as much as possible
             let unsolvable = self.reduce_and_check_singles_loop().is_none();
             if DEBUG > 0 {
@@ -159,12 +373,12 @@ impl Board {
             }
 
             //And lastly, check if self is solved yet
-            if self.is_solved() {
-                solved = true;
+            if !unsolvable && self.is_solved() {
                 if DEBUG > 0 {
                     println!("{self}");
                     println!("Solved!");
                 }
+                break;
             }
         }
     }
@@ -290,7 +504,7 @@ impl Board {
                 println!("Checking for {needed_digit} singles...");
             }
             //Stores the *only* possible location for the needed_digit, if it exists.
-            let mut possible_digit_location = Some((10, 10));
+            let mut possible_digit_location = Some(INVALID_LOCATION);
             //Loop through each position in the set and get a reference to each Cell
             for ((row, col), cell) in self.iter_indices(set).zip(self.iter_digits(set)) {
                 if DEBUG > 1 {
@@ -315,7 +529,7 @@ impl Board {
             //If we found a single possible_digit_location,
             if let Some(location) = possible_digit_location {
                 //check if we never found a place to put the digit.
-                if location == (10, 10) {
+                if location == INVALID_LOCATION {
                     //If we didn't, then it's unsolvable.
                     return None;
                 }
