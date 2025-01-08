@@ -1,22 +1,24 @@
-use crate::digit_set::DigitSet;
+use crate::{digit_set::DigitSet, location::Location};
 
 /// An iterator over the indices (in format (row: usize, col: usize)) of the given set.
 pub struct IndexIterator {
     set: DigitSet,
+    cells_per_set: usize,
     current: usize,
 }
 
 impl IndexIterator {
-    pub fn new(set: DigitSet) -> Self {
+    pub fn new(set: DigitSet, cells_per_set: usize) -> Self {
         Self {
             set,
+            cells_per_set,
             current: 0,
         }
     }
 }
 
 impl Iterator for IndexIterator {
-    type Item = (usize, usize);
+    type Item = Location;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current >= self.set.size() {
@@ -24,14 +26,14 @@ impl Iterator for IndexIterator {
         }
         else {
             let output = match self.set {
-                DigitSet::Row(row) => Some((row, self.current)),
-                DigitSet::Col(col) => Some((self.current, col)),
-                DigitSet::Box(box_index) => {
-                    let row = 3 * (box_index / 3) + self.current / 3;
-                    let col = 3 * (box_index % 3) + self.current % 3;
-                    Some((row, col))
+                DigitSet::Row(_, row) => Some(Location::Valid(row, self.current)),
+                DigitSet::Col(_, col) => Some(Location::Valid(self.current, col)),
+                DigitSet::Box(_, box_index) => {
+                    let row = self.cells_per_set * (box_index / self.cells_per_set) + self.current / self.cells_per_set;
+                    let col = self.cells_per_set * (box_index % self.cells_per_set) + self.current % self.cells_per_set;
+                    Some(Location::Valid(row, col))
                 },
-                DigitSet::All => Some((self.current / 9, self.current % 9)),
+                DigitSet::All(_) => Some(Location::Valid(self.current / self.cells_per_set, self.current % self.cells_per_set)),
             };
             self.current += 1;
             output

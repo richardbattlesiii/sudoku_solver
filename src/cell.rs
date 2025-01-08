@@ -1,24 +1,24 @@
 use std::fmt::Display;
 
 /// Represents a cell in the Sudoku, storing a list of the digits the cell could be.
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone)]
 pub struct Cell {
-    pub possibilities: [bool; 9],
+    pub possibilities: Vec<bool>,
     pub solved: bool,
 }
 
 impl Cell {
     /// Creates a Cell that could be any digit.
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
-            possibilities: [true; 9],
+            possibilities: vec![true; size],
             solved: false,
         }
     }
 
     /// Creates a solved Cell with the given digit.
-    pub fn new_single_digit(input: usize) -> Self {
-        let mut possibilities = [false; 9];
+    pub fn new_single_digit(size: usize, input: usize) -> Self {
+        let mut possibilities = vec![false; size];
         possibilities[input] = true;
 
         Self {
@@ -28,8 +28,8 @@ impl Cell {
     }
 
     /// Creates a solved Cell with the given char converted to a digit.
-    pub fn new_single_char(input: char) -> Self {
-        let mut possibilities = [false; 9];
+    pub fn new_single_char(size: usize, input: char) -> Self {
+        let mut possibilities = vec![false; size];
         if let Some(digit) = input.to_digit(10) {
             possibilities[digit as usize - 1] = true;
         }
@@ -46,7 +46,7 @@ impl Cell {
     /// Returns the only possible digit if it exists, or `None` if it doesn't.
     pub fn get_single_index(&self) -> Option<usize> {
         let mut output: Option<usize> = None;
-        for i in 0..9 {
+        for i in 0..self.possibilities.len() {
             if self.possibilities[i] {
                 if output.is_none() {
                     output = Some(i);
@@ -66,7 +66,7 @@ impl Cell {
         }
         else {
             let mut solved = false;
-            for digit in self.possibilities {
+            for &digit in self.possibilities.iter() {
                 if !solved && digit {
                     solved = true;
                 }
@@ -86,12 +86,6 @@ impl Cell {
         let mut output = 0;
         self.possibilities.iter().for_each(|value| if *value {output += 1});
         output
-    }
-}
-
-impl Default for Cell {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

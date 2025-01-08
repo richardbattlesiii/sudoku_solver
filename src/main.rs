@@ -6,6 +6,8 @@ pub mod digit_set;
 pub mod digit_iterator;
 pub mod index_iterator;
 pub mod boolean_operation;
+pub mod puzzle_generator;
+pub mod location;
 
 #[derive(Clone, Copy)]
 pub enum PuzzleToSolve {
@@ -22,31 +24,37 @@ pub enum PuzzleToSolve {
 }
 
 fn main() {
-   let sudoku_to_solve = PuzzleToSolve::VeryHard;
-
+   const NUM_PUZZLES: u128 = 1000;
+   const ROWS_PER_BOX: usize = 4;
+   const COLS_PER_BOX: usize = 4;
+   let mut generator = puzzle_generator::PuzzleGenerator::new();
    let mut fast_total = 0;
-   for _ in 0..100 {
+   for _puzzle_num in 0..NUM_PUZZLES {
+      let mut board = generator.generate_puzzle(ROWS_PER_BOX, COLS_PER_BOX);
+      println!("{board}");
+      //println!("Solved {puzzle_num} so far...");
       let start = Instant::now();
-      let mut board = board::Board::new(&select_puzzle(sudoku_to_solve));
       board.fast_solve();
       fast_total += start.elapsed().as_nanos();
+      println!("{board}");
    }
-   let fast_average = fast_total / 100;
+   let fast_average = fast_total / NUM_PUZZLES;
    println!("Fast is {fast_average} nanoseconds on average.");
 
-   let mut slow_total = 0;
-   for _ in 0..10 {
-      let start = Instant::now();
-      let mut board = board::Board::new(&select_puzzle(sudoku_to_solve));
-      board.solve();
-      slow_total += start.elapsed().as_nanos();
-   }
-   let slow_average = slow_total / 10;
-   println!("Slow is {slow_average} nanoseconds on average.");
+   // let mut slow_total = 0;
+   // for _ in 0..10 {
+   //    let start = Instant::now();
+   //    let mut board = board::Board::from_chars(&select_puzzle(sudoku_to_solve));
+   //    board.solve();
+   //    slow_total += start.elapsed().as_nanos();
+   // }
+   // let slow_average = slow_total / 10;
+   // println!("Slow is {slow_average} nanoseconds on average.");
 
-   println!("Fast is {} times faster on average.", slow_average/fast_average);
+   // println!("Fast is {} times faster on average.", slow_average/fast_average);
 }
 
+#[allow(dead_code)]
 fn select_puzzle(sudoku_to_solve: PuzzleToSolve) -> [[char; 9]; 9] {
    let initial = match sudoku_to_solve {
       //Very hard sudoku (takes significantly longer than the others)

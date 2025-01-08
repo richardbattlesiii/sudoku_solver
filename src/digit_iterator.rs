@@ -8,10 +8,10 @@ pub struct DigitIterator<'a> {
 
 impl<'a> DigitIterator<'a> {
     /// Creates a new DigitIterator containing a new IndexIterator over the specified board and set.
-    pub fn new(board: &'a Board, set: DigitSet) -> Self {
+    pub fn new(board: &'a Board, set: DigitSet, cells_per_set: usize) -> Self {
         Self {
             board,
-            index_iterator: IndexIterator::new(set),
+            index_iterator: IndexIterator::new(set, cells_per_set),
         }
     }
 }
