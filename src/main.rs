@@ -25,21 +25,23 @@ pub enum PuzzleToSolve {
 
 fn main() {
    const NUM_PUZZLES: u128 = 1000;
-   const ROWS_PER_BOX: usize = 4;
+   const ROWS_PER_BOX: usize = 3;
    const COLS_PER_BOX: usize = 4;
    let mut generator = puzzle_generator::PuzzleGenerator::new();
    let mut fast_total = 0;
-   for _puzzle_num in 0..NUM_PUZZLES {
+   for puzzle_num in 0..NUM_PUZZLES {
       let mut board = generator.generate_puzzle(ROWS_PER_BOX, COLS_PER_BOX);
       println!("{board}");
-      //println!("Solved {puzzle_num} so far...");
+      if puzzle_num % (NUM_PUZZLES / 100) == 0 {
+         println!("Solved {puzzle_num} so far...");
+      }
       let start = Instant::now();
       board.fast_solve();
       fast_total += start.elapsed().as_nanos();
       println!("{board}");
    }
    let fast_average = fast_total / NUM_PUZZLES;
-   println!("Fast is {fast_average} nanoseconds on average.");
+   println!("Fast is {} nanoseconds on average.", format_large_number(fast_average));
 
    // let mut slow_total = 0;
    // for _ in 0..10 {
@@ -52,6 +54,17 @@ fn main() {
    // println!("Slow is {slow_average} nanoseconds on average.");
 
    // println!("Fast is {} times faster on average.", slow_average/fast_average);
+}
+
+fn format_large_number(input: u128) -> String {
+   let mut output = format!("{input}");
+   let len = output.len();
+   if len >= 3 {
+      for i in (1..len-2).rev().step_by(3) {
+         output.insert(i, ',');
+      }
+   }
+   output
 }
 
 #[allow(dead_code)]

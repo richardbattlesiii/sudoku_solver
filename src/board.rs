@@ -98,7 +98,7 @@ impl Board {
             if solvable && self.is_solved() {
                 return;
             }
-            else if !solvable {
+            else if !solvable || self.has_contradiction() {
                 if self.backtrack(&mut states_before_guesses).is_none() {
                     break;
                 }
@@ -367,7 +367,6 @@ impl Board {
                 //             let solved_cell = Cell::new_single_digit(set_size, needed_digit);
                 //             self.set(location, solved_cell);
                 //             found_something = Some(true);
-                //             found_digit = true;
                 //             break;
                 //         }
                 //         else if location == Location::Invalid {
@@ -389,6 +388,25 @@ impl Board {
         }
 
         Some(())
+    }
+
+    pub fn has_contradiction(&mut self) -> bool {
+        self.for_sets(Self::has_contradiction_set, BooleanOperation::OrLazy).unwrap()
+    }
+
+    fn has_contradiction_set(&mut self, set: DigitSet) -> Option<bool> {
+        let mut used = vec![0; self.cells_per_set];
+        for location in self.iter_indices(set) {
+            let cell = self.get(location);
+            if let Some(digit) = cell.get_single_index() {
+                used[digit] += 1;
+                if used[digit] > 1 {
+                    return Some(true);
+                }
+            }
+        }
+
+        Some(false)
     }
 
     /// Calls `reduce_possibilities` and `check_single_location`, then `solve_recursive` if those aren't enough
@@ -634,7 +652,7 @@ impl Board {
     }
 
     pub fn is_solved(&mut self) -> bool {
-        unsafe { self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy).unwrap_unchecked() }
+        self.for_sets(Board::check_solved_set, BooleanOperation::AndLazy).unwrap()
     }
 
     /// Returns a `DigitIterator` over the given set (which returns a type of `&Cell`).
